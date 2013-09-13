@@ -10,15 +10,13 @@
 //   NEO_KHZ400  400 KHz bitstream (e.g. FLORA pixels)
 //   NEO_KHZ800  800 KHz bitstream (e.g. High Density LED strip)
 
-//#define NUM_LEDS 150
 #define NUM_LEDS 149
 #define TWINKLE_THRESHOLD 1
 #define TWINKLE_PERIOD_MAX 100
 #define TWINKLESTART 100
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
-int brightness = 25;
-boolean countingup = true;
 
+// All the information needed to set color and brightness for a pixel
 typedef struct {
 	uint8_t brightness;
 	uint8_t red;
@@ -26,15 +24,25 @@ typedef struct {
 	uint8_t blue;
 } Color;
 
+// Periodic information for twinkles and other period based
+// functions packed binary format to keep space usage minimal
 typedef struct {
 	uint16_t period : 8;
 	uint16_t step : 8;
 } Twinkle;
+// one period tracker per led
+Twinkle _timings[NUM_LEDS];
 
+// Because of a wierdness with the way the Arduino IDE compiles,
+// we need to do function definition headers explicitly for anything
+// that accepts a Color or Color pointer, because otherwise the
+// compile step moves them to a place in code before the color struct
+// is defined.
 Color *setBrightness(uint8_t brightness, Color *color);
 void setPixel(int n, Color *color);
 void setstrip(int row, int number, Color *color);
 
+// Define the colors of the flag as color structs
 Color _red     = {255, 255,   0,   0};
 Color _orange  = {255, 255,  60,   0};
 Color _yellow  = {255, 255, 188,   0};
@@ -42,8 +50,12 @@ Color _green   = {255,   0, 255,   0};
 Color _blue    = {255,   0,   0, 255};
 Color _purple  = {255, 200,  40, 255};
 Color _off     = {  0,   0,   0,   0};
-Color _tmp;
+Color _tmp; // since this is single threaded, we can use this to
+            // hold color info for various uses, like after setting
+			// brightness
 
+// To minimize pointer stuff for non coders, make set of defines that
+// point to the right color when we need it. Also a "color" for off
 #define RED    &_red
 #define ORANGE &_orange
 #define YELLOW &_yellow
@@ -52,10 +64,12 @@ Color _tmp;
 #define PURPLE &_purple
 #define OFF    &_off
 
-
+// Colors in order of appearance. position corresponds to row
 Color *color_row[6] = {RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE};
-Twinkle _timings[NUM_LEDS];
 
+// setBrightness function, takes a brightness and a color,
+// returns a color set to that brightness. Can be used inline
+// anywhere that accepts a color to have a different brightness.
 Color *setBrightness(uint8_t brightness, Color *color) {
 	_tmp.brightness = brightness;
 	_tmp.red = color->red;
@@ -64,6 +78,24 @@ Color *setBrightness(uint8_t brightness, Color *color) {
 	return &_tmp;
 }
 
+// setPixel turns pixel n on, and sets it to the color passed in,
+// used in conjunction with setBrightness, it is all we need
+// to control a pixel. Doesn't display the change,
+// strip.show() is required for the change to be visible. Keeps
+// comms delays down, an meant to be used as a building block
+void setPixel(int n, Color *color) {
+	// brightness calc magic - based off the NeoPixel lib
+	strip.setPixelColor(n,
+			((color->red   * color->brightness) >> 8),
+			((color->green * color->brightness) >> 8),
+			((color->blue  * color->brightness) >> 8));
+}
+
+// Take a row and col, and return the LED number for it.
+// Handles the l -> r and r-> l rows appropriately, so this
+// just acts like a grid. Row 1 is the top, row, and
+// Col 0 is the column on the same side as the lines feeding
+// the strips
 int coord(int row, int col) {
 	int res = 0;
 	switch(row) {
@@ -92,6 +124,8 @@ int coord(int row, int col) {
 	return res;
 }
 
+// For color selection, it is sometimes useful to know what
+// row an led number is in. This will return the row number
 int num_to_row(int n) {
 	if(n < 25) return 6;
 	if(n < 50) return 5;
@@ -101,14 +135,13 @@ int num_to_row(int n) {
 	return 1;
 }
 
-void setPixel(int n, Color *color) {
-	// brightness calc magic - based off the NeoPixel lib
-	strip.setPixelColor(n,
-			((color->red   * color->brightness) >> 8),
-			((color->green * color->brightness) >> 8),
-			((color->blue  * color->brightness) >> 8));
-}
+/*****************************************************************************
+ * Group display functions. These all call show after they are used. They
+ * also are bigger building blocks that can be usded in the construction of
+ * patterns.
+ */
 
+// Sets the first number of pixels in a row to the specified color
 void setstrip(int row, int number, Color *color) {
 	for (int i=0; i < number; i++) {
 		setPixel(coord(row, i), color);
@@ -116,6 +149,7 @@ void setstrip(int row, int number, Color *color) {
 	strip.show();
 }
 
+// Turns all the pixels off
 void clear() {
 	for (int i=0; i<NUM_LEDS; i++){
 		setPixel(i, OFF);
@@ -123,19 +157,54 @@ void clear() {
 	strip.show();
 }
 
-void setup() {
-	strip.begin();
-	strip.show(); // Initialize all pixels to 'off'
+
+
+//sets the rainbow pattern at the specified brightness
+void solid(uint8_t bright) {
+	for(int i=1; i <= 6; i++) {
+		setstrip(i, 25, setBrightness(bright, color_row[i-1]));
+	}
 }
 
-void loop() {
-	fade_in(0, TWINKLESTART);
-	twinkle(1000);
-	alt_tetris_in();
-	delay(1000);
-	fade_out(255);
-	delay(500);
+// The flag starts at col 0 as very faint, and increases brightness
+// in each column until column 25 is super bright
+void fade_LtR() {
+	for(uint8_t i=0; i < 25 ; i++)
+	{
+		setPixel(coord(1,i), setBrightness(i * 10, RED));
+		setPixel(coord(2,i), setBrightness(i * 10, ORANGE));
+		setPixel(coord(3,i), setBrightness(i * 10, YELLOW));
+		setPixel(coord(4,i), setBrightness(i * 10, GREEN));
+		setPixel(coord(5,i), setBrightness(i * 10, BLUE));
+		setPixel(coord(6,i), setBrightness(i * 10, PURPLE));
+	}
+	strip.show();
 }
+
+// starts from the brightness specified, and fades to off. only does
+// this in the rainbow pattern
+void fade_out(uint8_t b) {
+	while (b > 0) {
+		solid(b);
+		b--;
+		delay(15);
+	}
+}
+
+// fades up, starting at a brightness (start) and ending with(end)
+// note, only does so in the rainbow pattern
+void fade_in(uint8_t start, uint8_t end) {
+	for(int i=start; i < end; i++) {
+		solid(i);
+		delay(15);
+	}
+}
+
+
+/*****************************************************************************
+ * Complex patterns - not simple steps, but a full on behavior that doesn't
+ * really make sense as a building block
+ *****************************************************************************/
 
 void alt_tetris_in() {
 	for (int i=6; i>0; i--) {
@@ -148,7 +217,7 @@ void alt_tetris_in() {
 	}
 }
 
-
+// TWINKLES SECTION
 int twinkle_period() {
   int maximum = TWINKLE_PERIOD_MAX;
   int minimum = TWINKLE_PERIOD_MAX/2;
@@ -208,36 +277,24 @@ void twinkle(int n){
 	}
 	fade_out(TWINKLESTART);
 }
+// END TWINKLES
 
-void solid(uint8_t bright) {
-	for(int i=1; i <= 6; i++) {
-		setstrip(i, 25, setBrightness(bright, color_row[i-1]));
-	}
+/*****************************************************************************
+ * ARDUINO FUNCS - the ones you are used to having standard
+ *****************************************************************************/
+
+
+void setup() {
+	strip.begin();
+	strip.show(); // Initialize all pixels to 'off'
 }
 
-void fade_LtR() {
-	for(uint8_t i=0; i < 25 ; i++)
-	{
-		setPixel(coord(1,i), setBrightness(i * 10, RED));
-		setPixel(coord(2,i), setBrightness(i * 10, ORANGE));
-		setPixel(coord(3,i), setBrightness(i * 10, YELLOW));
-		setPixel(coord(4,i), setBrightness(i * 10, GREEN));
-		setPixel(coord(5,i), setBrightness(i * 10, BLUE));
-		setPixel(coord(6,i), setBrightness(i * 10, PURPLE));
-	}
-	strip.show();
-}
-
-void fade_out(uint8_t b) {
-	while (b > 0) {
-		solid(b);
-		b--;
-		delay(15);
-	}
-}
-void fade_in(uint8_t start, uint8_t end) {
-	for(int i=start; i < end; i++) {
-		solid(i);
-		delay(15);
-	}
+// Build the overal sequence of patterns here
+void loop() {
+	fade_in(0, TWINKLESTART);
+	twinkle(1000);
+	alt_tetris_in();
+	delay(1000);
+	fade_out(255);
+	delay(500);
 }
