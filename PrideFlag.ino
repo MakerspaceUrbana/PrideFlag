@@ -66,6 +66,14 @@ Color _tmp; // since this is single threaded, we can use this to
 
 // Colors in order of appearance. position corresponds to row
 Color *color_row[6] = {RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE};
+//indexes...
+#define R 0
+#define O 1
+#define Y 2
+#define G 3
+#define B 4
+#define P 5
+
 
 // setBrightness function, takes a brightness and a color,
 // returns a color set to that brightness. Can be used inline
@@ -277,7 +285,99 @@ void twinkle(int n){
 	}
 	fade_out(TWINKLESTART);
 }
-// END TWINKLES
+
+// RANDOM IN
+void random_in() {
+	// start with a randomized order
+	uint8_t color_order[NUM_LEDS];
+	char thiscolor;
+	int choice;
+	//these represent:       r  o  y  g  b  p
+	uint8_t cremaining[6] ={24,25,25,25,25,25};
+	for (int i=0; i < NUM_LEDS; i++){
+		// make sure we get a random color that is within the right count
+		while(1) {
+			choice = random(0,6);
+			if (cremaining[choice] > 0) {
+				cremaining[choice]--;
+				break;
+			}
+		}
+		color_order[i] = choice;
+	}
+	// now display
+	for (int i=0; i < NUM_LEDS; i++) {
+		setPixel(i, color_row[color_order[i]]);
+	}
+	strip.show();
+	delay(100);
+
+	// step through a sort, displaying at each step.
+	// this is not an efficient sort, but a 'pretty' sort
+	bool sorted = false;
+	while(!sorted) {
+		//find a swap
+		uint8_t c1, c2 = 255, row;
+		// first find a random misplaced pixel
+		while(1) {
+			uint8_t  col=random(0,25);
+			row=random(1,7);
+			// is the spot we picked OK or not already, if not, we have a coord
+			if(color_order[coord(row, col)] != (row-1)) {
+				c1 = coord(row, col);
+				break;
+			}
+		}
+		// then find a pixel of the color that goes in the row we just selected
+		// sort of randomly
+		while(1) {
+			uint8_t row2=random(1,7), col=random(0,25);
+			// don't just move a pixel around the row it is in
+			if (row2 == row) {
+				continue;
+			}
+			// start in a random place in the row, and move through it to find
+			// the first non matching one
+			for (int i=col; i < col+25; i++) {
+				if(color_order[coord(row2, i % 25)] == (row-1)) {
+					// not a matching color
+					continue;
+				}
+				c2 = coord(row, i%25);
+			}
+			// have we set c2?
+			if (c2 < NUM_LEDS) break;
+		}
+		// do swap
+		uint8_t tmp = color_order[c1];
+		color_order[c1] = color_order[c2];
+		color_order[c2] = tmp;
+
+		// display new order
+		for (int i=0; i < NUM_LEDS; i++) {
+			setPixel(i, color_row[color_order[i]]);
+		}
+		strip.show();
+
+		//check for sorted
+		int i=NUM_LEDS-1;
+		while (i >=0) {
+			uint8_t max_seen = 0;
+			if(color_order[i] > max_seen) {
+				max_seen = color_order[i];
+				continue;
+			} else if(color_order[i] < max_seen) {
+				break; // and sorted doesn't change
+			}
+			i--;
+		}
+		if (i == 0) { // we made the whole loop before breaking, that means sorted!
+			sorted=true;
+		}
+		delay(10);
+	}
+}
+// END RANDOM IN
 
 /*****************************************************************************
  * ARDUINO FUNCS - the ones you are used to having standard
