@@ -11,29 +11,58 @@
 //   NEO_KHZ800  800 KHz bitstream (e.g. High Density LED strip)
 
 //#define NUM_LEDS 150
-#define NUM_LEDS 150
+#define NUM_LEDS 149
+#define TWINKLE_THRESHOLD 1
+#define TWINKLE_PERIOD_MAX 100
+#define TWINKLESTART 100
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
 int brightness = 25;
 boolean countingup = true;
 
-#define ROW1(n) (150-(n+1))
-#define ROW2(n) (n+100)
-#define ROW3(n) (100 - (n+1))
-#define ROW4(n) (n+50)
-#define ROW5(n) (50 - (n+1))
-#define ROW6(n) (n+0)
+typedef struct {
+	uint8_t brightness;
+	uint8_t red;
+	uint8_t green;
+	uint8_t blue;
+} Color;
+
+typedef struct {
+	uint16_t period : 8;
+	uint16_t step : 8;
+} Twinkle;
+
+Color *setBrightness(uint8_t brightness, Color *color);
+void setPixel(int n, Color *color);
+void setstrip(int row, int number, Color *color);
+
+Color _red     = {255, 255,   0,   0};
+Color _orange  = {255, 255,  60,   0};
+Color _yellow  = {255, 255, 188,   0};
+Color _green   = {255,   0, 255,   0};
+Color _blue    = {255,   0,   0, 255};
+Color _purple  = {255, 200,  40, 255};
+Color _off     = {  0,   0,   0,   0};
+Color _tmp;
+
+#define RED    &_red
+#define ORANGE &_orange
+#define YELLOW &_yellow
+#define GREEN  &_green
+#define BLUE   &_blue
+#define PURPLE &_purple
+#define OFF    &_off
 
 
-#define RED    255,0,0
-#define ORANGE 255,60,0
-#define YELLOW 255,188,0
-#define GREEN  0,255,0
-#define BLUE   0,0,255
-#define PURPLE 200,40,255
+Color *color_row[6] = {RED, ORANGE, YELLOW, GREEN, BLUE, PURPLE};
+Twinkle _timings[NUM_LEDS];
 
-
-uint8_t _brightnesses[NUM_LEDS];
-int16_t _timings[NUM_LEDS];
+Color *setBrightness(uint8_t brightness, Color *color) {
+	_tmp.brightness = brightness;
+	_tmp.red = color->red;
+	_tmp.green = color->green;
+	_tmp.blue = color->blue;
+	return &_tmp;
+}
 
 int coord(int row, int col) {
 	int res = 0;
@@ -63,145 +92,152 @@ int coord(int row, int col) {
 	return res;
 }
 
-void setBrightnessAndColor(int n, uint8_t brightness, uint8_t r, uint8_t g, uint8_t b) {
-	// Stored brightness value is different than what's passed.
-	// This simplifies the actual scaling math later, allowing a fast
-	// 8x8-bit multiply and taking the MSB.  'brightness' is a uint8_t,
-	// adding 1 here may (intentionally) roll over...so 0 = max brightness
-	// (color values are interpreted literally; no scaling), 1 = min
-	// brightness (off), 255 = just below max brightness.
-	//uint8_t newBrightness = brightness + 1;
-	// Brightness has changed -- re-scale existing data in RAM
-	//uint8_t  c,
-			 //oldBrightness = _brightnesses[n] - 1; // De-wrap old brightness value
-	//uint16_t scale;
-
-
-	//if(oldBrightness == 0) scale = 0; // Avoid /0
-	//else if(brightness == 255) scale = 65535 / oldBrightness;
-	//else scale = (((uint16_t)newBrightness << 8) - 1) / oldBrightness;
-
-	strip.setPixelColor(n,
-			((r * brightness) >> 8),
-			((g * brightness) >> 8),
-			((b * brightness) >> 8));
-	_brightnesses[n] = brightness;
+int num_to_row(int n) {
+	if(n < 25) return 6;
+	if(n < 50) return 5;
+	if(n < 75) return 4;
+	if(n < 100) return 3;
+	if(n < 125) return 2;
+	return 1;
 }
 
-void setstrip(int row, int number, uint8_t brightness, uint8_t r, uint8_t g, uint8_t b) {
+void setPixel(int n, Color *color) {
+	// brightness calc magic - based off the NeoPixel lib
+	strip.setPixelColor(n,
+			((color->red   * color->brightness) >> 8),
+			((color->green * color->brightness) >> 8),
+			((color->blue  * color->brightness) >> 8));
+}
+
+void setstrip(int row, int number, Color *color) {
 	for (int i=0; i < number; i++) {
-		setBrightnessAndColor(coord(row, i), brightness, r, g, b);
+		setPixel(coord(row, i), color);
 	}
+	strip.show();
 }
 
 void clear() {
 	for (int i=0; i<NUM_LEDS; i++){
-		strip.setPixelColor(i, 0,0,0);
+		setPixel(i, OFF);
 	}
+	strip.show();
 }
 
 void setup() {
-	for (int i=0; i <NUM_LEDS; i++) {
-		_brightnesses[i] = 0;
-	}
 	strip.begin();
 	strip.show(); // Initialize all pixels to 'off'
 }
 
 void loop() {
-	fade_LtR();
-	strip.show();
-	delay(5000);
-	tetris_inb();
-	delay(5000);
-	clear();
-	strip.show();
+	fade_in(0, TWINKLESTART);
+	twinkle(1000);
+	alt_tetris_in();
+	delay(1000);
+	fade_out(255);
+	delay(500);
 }
-void tetris_in() {
-	for (int j = 1; j <=6; j++) {
-		setstrip(j,25, 200, PURPLE);
-		strip.show();
-		delay(100);
-	}
-	for (int j = 1; j <=5; j++) {
-		setstrip(j,25, 200, BLUE);
-		strip.show();
-		delay(100);
-	}
-	for (int j = 1; j <=4; j++) {
-		setstrip(j,25, 200, GREEN);
-		strip.show();
-		delay(100);
-	}
-	for (int j = 1; j <=3; j++) {
-		setstrip(j,25, 200, YELLOW);
-		strip.show();
-		delay(100);
-	}
-	for (int j = 1; j <=2; j++) {
-		setstrip(j,25, 200, ORANGE);
-		strip.show();
-		delay(100);
-	}
-	for (int j = 1; j <=1; j++) {
-		setstrip(j,25, 200, RED);
-		strip.show();
-		delay(100);
+
+void alt_tetris_in() {
+	for (int i=6; i>0; i--) {
+		for (int j=1; j<=i; j++) {
+			setstrip(j, 25, color_row[i-1]);
+			delay(100);
+			setstrip(j, 25, OFF);
+		}
+		setstrip(i, 25, color_row[i-1]);
 	}
 }
-void tetris_inb() {
-	for (int j = 1; j <=6; j++) {
-		setstrip(j,25, 200, PURPLE);
-		strip.show();
-		delay(100);
-		setstrip(j, 25, 0, 0, 0, 0);
+
+
+int twinkle_period() {
+  int maximum = TWINKLE_PERIOD_MAX;
+  int minimum = TWINKLE_PERIOD_MAX/2;
+  return random(minimum,maximum);
+}
+
+void start_one_twink() {
+	while (1) {
+		int row = random(1, 7);
+		int col = random(1,25);
+		int target = coord(row, col);
+		if (_timings[target].period == 0) {
+			_timings[target].period = twinkle_period();
+			_timings[target].step = 0;
+			break;
+		}
 	}
-	setstrip(6,25, 200, PURPLE);
-	for (int j = 1; j <=5; j++) {
-		setstrip(j,25, 200, BLUE);
-		strip.show();
-		delay(100);
-		setstrip(j, 25, 0, 0, 0, 0);
+}
+
+void twinkle(int n){
+	solid(TWINKLESTART);
+	//reset twinkles
+	for (int i = 0; i < NUM_LEDS; i++) {
+		_timings[i].period = 0;
+		_timings[i].step = 0;
 	}
-	setstrip(5,25, 200, BLUE);
-	for (int j = 1; j <=4; j++) {
-		setstrip(j,25, 200, GREEN);
+	while(n >0) {
+		if (random(1, 10) > TWINKLE_THRESHOLD) {
+			start_one_twink();
+		}
+		for (int i=0; i<NUM_LEDS; i++) {
+			if(_timings[i].period == 0) {
+				continue;
+			} else if (_timings[i].period == _timings[i].step) {
+				setPixel(i, setBrightness(TWINKLESTART,color_row[num_to_row(i) - 1]));
+				_timings[i].period = 0;
+			} else {
+				int adjust;
+				double dstep = (double)(_timings[i].step);
+				double dperiod = (double)(_timings[i].period);
+				double bright_percent = dstep/dperiod;
+				bright_percent = sin(bright_percent * -2 * PI);
+				if (bright_percent < 0) {
+					adjust = (int) ((double)TWINKLESTART * bright_percent);
+					_timings[i].step+=2;
+				} else {
+					adjust = (int) ((double)(255-TWINKLESTART) * bright_percent);
+					_timings[i].step++;
+				}
+				setPixel(i, setBrightness(TWINKLESTART + adjust,
+								color_row[num_to_row(i) -1]));
+			}
+		}
 		strip.show();
-		delay(100);
-		setstrip(j, 25, 0, 0, 0, 0);
+		delay(10);
+		n--;
 	}
-	setstrip(4,25, 200, GREEN);
-	for (int j = 1; j <=3; j++) {
-		setstrip(j,25, 200, YELLOW);
-		strip.show();
-		delay(100);
-		setstrip(j, 25, 0, 0, 0, 0);
+	fade_out(TWINKLESTART);
+}
+
+void solid(uint8_t bright) {
+	for(int i=1; i <= 6; i++) {
+		setstrip(i, 25, setBrightness(bright, color_row[i-1]));
 	}
-	setstrip(3,25, 200, YELLOW);
-	for (int j = 1; j <=2; j++) {
-		setstrip(j,25, 200, ORANGE);
-		strip.show();
-		delay(100);
-		setstrip(j, 25, 0, 0, 0, 0);
-	}
-	setstrip(2,25, 200, ORANGE);
-	for (int j = 1; j <=1; j++) {
-		setstrip(j,25, 200, RED);
-		strip.show();
-		delay(100);
-		setstrip(j, 25, 0, 0, 0, 0);
-	}
-	setstrip(1,25, 200, RED);
 }
 
 void fade_LtR() {
 	for(uint8_t i=0; i < 25 ; i++)
 	{
-		setBrightnessAndColor(ROW1(i), i * 10, RED);
-		setBrightnessAndColor(ROW2(i), i * 10, ORANGE);
-		setBrightnessAndColor(ROW3(i), i * 10, YELLOW);
-		setBrightnessAndColor(ROW4(i), i * 10, GREEN);
-		setBrightnessAndColor(ROW5(i), i * 10, BLUE);
-		setBrightnessAndColor(ROW6(i), i * 10, PURPLE);
+		setPixel(coord(1,i), setBrightness(i * 10, RED));
+		setPixel(coord(2,i), setBrightness(i * 10, ORANGE));
+		setPixel(coord(3,i), setBrightness(i * 10, YELLOW));
+		setPixel(coord(4,i), setBrightness(i * 10, GREEN));
+		setPixel(coord(5,i), setBrightness(i * 10, BLUE));
+		setPixel(coord(6,i), setBrightness(i * 10, PURPLE));
+	}
+	strip.show();
+}
+
+void fade_out(uint8_t b) {
+	while (b > 0) {
+		solid(b);
+		b--;
+		delay(15);
+	}
+}
+void fade_in(uint8_t start, uint8_t end) {
+	for(int i=start; i < end; i++) {
+		solid(i);
+		delay(15);
 	}
 }
