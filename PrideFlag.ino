@@ -391,10 +391,15 @@ void setup() {
 
 // Build the overal sequence of patterns here
 void loop() {
-	fade_in(0, TWINKLESTART);
-	twinkle(1000);
-	alt_tetris_in();
-	delay(1000);
-	fade_out(255);
+	//fade_in(0, TWINKLESTART);
+	//twinkle(1000);
+	//alt_tetris_in();
+	//delay(1000);
+	//fade_out(255);
+	//delay(500);
+	solid(255);
 	delay(500);
+	clear();
+	delay(500);
+	random_in();
 }
