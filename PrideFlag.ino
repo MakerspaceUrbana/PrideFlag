@@ -133,7 +133,7 @@ int coord(int row, int col) {
 			res = NUM_LEDS - (col+1);
 			break;
 		case 2: // orange row up from max yellow
-			res = (col+(N_PURPLE + N_BLUE + N_GREEN + N_YELLOW);
+			res = (col+(N_PURPLE + N_BLUE + N_GREEN + N_YELLOW));
 			break;
 		case 3: // yellow row down from max yellow
 			res = ((N_PURPLE + N_BLUE + N_GREEN + N_YELLOW)- (col+1));
