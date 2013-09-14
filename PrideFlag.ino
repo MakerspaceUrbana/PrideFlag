@@ -10,7 +10,14 @@
 //   NEO_KHZ400  400 KHz bitstream (e.g. FLORA pixels)
 //   NEO_KHZ800  800 KHz bitstream (e.g. High Density LED strip)
 
-#define NUM_LEDS 149
+#define N_RED    23
+#define N_ORANGE 25
+#define N_YELLOW 25
+#define N_GREEN  25
+#define N_BLUE   25
+#define N_PURPLE 25
+
+#define NUM_LEDS 148
 #define TWINKLE_THRESHOLD 1
 #define TWINKLE_PERIOD_MAX 100
 #define TWINKLESTART 100
@@ -103,26 +110,41 @@ void setPixel(int n, Color *color) {
 // Handles the l -> r and r-> l rows appropriately, so this
 // just acts like a grid. Row 1 is the top, row, and
 // Col 0 is the column on the same side as the lines feeding
-// the strips
+// the strips translates from grid to the literal numbering scheme:
+// GRID - row: col
+// 1: 0, 1 .. N_RED - 1
+// 2: 0, 1 .. N_ORANGE - 1
+// 3: 0, 1 .. N_YELLOW - 1
+// 4: 0, 1 .. N_NGREEN - 1
+// 5: 0, 1 .. N_BLUE - 1
+// 6: 0, 1 .. N_PURPLE - 1
+//
+// RESULT - address number (assuming 5 per row)
+// 25 26 27 28 29
+// 24 23 22 21 20
+// 15 16 17 18 19
+// 14 13 12 11 10
+//  5  6  7  8  9
+//  4  3  2  1  0
 int coord(int row, int col) {
 	int res = 0;
 	switch(row) {
-		case 1:
-			res = 150 - (col+1);
+		case 1: // red row down from max red
+			res = NUM_LEDS - (col+1);
 			break;
-		case 2:
-			res = (col+100);
+		case 2: // orange row up from max yellow
+			res = (col+(N_PURPLE + N_BLUE + N_GREEN + N_YELLOW);
 			break;
-		case 3:
-			res = (100 - (col+1));
+		case 3: // yellow row down from max yellow
+			res = ((N_PURPLE + N_BLUE + N_GREEN + N_YELLOW)- (col+1));
 			break;
-		case 4:
-			res = (col+50);
+		case 4: // green row, up from max blue
+			res = (col+(N_PURPLE + N_BLUE));
 			break;
-		case 5:
-			res = 50 - (col+1);
+		case 5: // blue row down from max blue
+			res = (N_PURPLE + N_BLUE)- (col+1);
 			break;
-		case 6:
+		case 6: //purple row, from begining
 			res = col+0;
 			break;
 		default:
@@ -135,11 +157,11 @@ int coord(int row, int col) {
 // For color selection, it is sometimes useful to know what
 // row an led number is in. This will return the row number
 int num_to_row(int n) {
-	if(n < 25) return 6;
-	if(n < 50) return 5;
-	if(n < 75) return 4;
-	if(n < 100) return 3;
-	if(n < 125) return 2;
+	if(n < N_PURPLE) return 6;
+	if(n < N_PURPLE + N_BLUE) return 5;
+	if(n < N_PURPLE + N_BLUE + N_GREEN) return 4;
+	if(n < N_PURPLE + N_BLUE + N_GREEN + N_YELLOW) return 3;
+	if(n < N_PURPLE + N_BLUE + N_GREEN + N_YELLOW + N_ORANGE) return 2;
 	return 1;
 }
 
@@ -290,10 +312,11 @@ void twinkle(int n){
 void random_in() {
 	// start with a randomized order
 	uint8_t color_order[NUM_LEDS];
-	char thiscolor;
+	for(int i=0; i < NUM_LEDS; i++) {
+		color_order[i] = 6;
+	}
 	int choice;
-	//these represent:       r  o  y  g  b  p
-	uint8_t cremaining[6] ={24,25,25,25,25,25};
+	uint8_t cremaining[6] ={N_RED,N_ORANGE,N_YELLOW,N_GREEN,N_BLUE,N_PURPLE};
 	for (int i=0; i < NUM_LEDS; i++){
 		// make sure we get a random color that is within the right count
 		while(1) {
@@ -304,6 +327,9 @@ void random_in() {
 			}
 		}
 		color_order[i] = choice;
+		setPixel(i, color_row[choice]);
+		strip.show();
+		delay(10);
 	}
 	// now display
 	for (int i=0; i < NUM_LEDS; i++) {
@@ -315,39 +341,36 @@ void random_in() {
 	// step through a sort, displaying at each step.
 	// this is not an efficient sort, but a 'pretty' sort
 	bool sorted = false;
-	while(!sorted) {
+	uint16_t failsafe = (1<<11)-1;
+	while(!sorted && failsafe) {
+		failsafe--;
 		//find a swap
-		uint8_t c1, c2 = 255, row;
-		// first find a random misplaced pixel
+		// find a random misplaced led
+		uint8_t c1=0, c2=0;
+		c1 = random(0, NUM_LEDS);
 		while(1) {
-			uint8_t  col=random(0,25);
-			row=random(1,7);
-			// is the spot we picked OK or not already, if not, we have a coord
-			if(color_order[coord(row, col)] != (row-1)) {
-				c1 = coord(row, col);
+			failsafe--;
+			if (c1 >= NUM_LEDS) {
+				c1 = random(NUM_LEDS);
+			}
+			if ((num_to_row(c1)-1) != color_order[c1]) {
 				break;
 			}
+			c1++;
 		}
-		// then find a pixel of the color that goes in the row we just selected
-		// sort of randomly
-		while(1) {
-			uint8_t row2=random(1,7), col=random(0,25);
-			// don't just move a pixel around the row it is in
-			if (row2 == row) {
-				continue;
-			}
-			// start in a random place in the row, and move through it to find
-			// the first non matching one
-			for (int i=col; i < col+25; i++) {
-				if(color_order[coord(row2, i % 25)] == (row-1)) {
-					// not a matching color
-					continue;
+		uint8_t target_row = color_order[c1]+1;
+		bool target_found = false;
+		while(target_found == false) {
+			for(int i=0; i < 25; i++) {
+				if (color_order[coord(target_row, i)] != (target_row-1)) {
+					c2 = coord(target_row, i);
+					target_found = true;
+					break;
 				}
-				c2 = coord(row, i%25);
 			}
-			// have we set c2?
-			if (c2 < NUM_LEDS) break;
 		}
+		//setstrip(row2,25, setBrightness(125, color_row[color_order[c2]]));
+		//delay(2000);
 		// do swap
 		uint8_t tmp = color_order[c1];
 		color_order[c1] = color_order[c2];
@@ -360,22 +383,18 @@ void random_in() {
 		strip.show();
 
 		//check for sorted
-		int i=NUM_LEDS-1;
-		while (i >=0) {
-			uint8_t max_seen = 0;
-			if(color_order[i] > max_seen) {
-				max_seen = color_order[i];
-				continue;
-			} else if(color_order[i] < max_seen) {
-				break; // and sorted doesn't change
+		int bad_count = 0;
+		for (int i = 0 ; i < NUM_LEDS; i++) {
+			if ((num_to_row(i)-1) != color_order[i]) {
+				bad_count++;
 			}
-			i--;
 		}
-		if (i == 0) { // we made the whole loop before breaking, that means sorted!
+		if (bad_count < 4) {
 			sorted=true;
 		}
-		delay(10);
+		delay(40);
 	}
+	solid(255);
 }
 // END RANDOM IN
 
@@ -391,15 +410,12 @@ void setup() {
 
 // Build the overal sequence of patterns here
 void loop() {
-	//fade_in(0, TWINKLESTART);
-	//twinkle(1000);
-	//alt_tetris_in();
-	//delay(1000);
-	//fade_out(255);
-	//delay(500);
-	solid(255);
-	delay(500);
-	clear();
+	fade_in(0, TWINKLESTART);
+	twinkle(1000);
+	alt_tetris_in();
+	delay(1000);
+	fade_out(255);
 	delay(500);
 	random_in();
+	fade_out(255);
 }
