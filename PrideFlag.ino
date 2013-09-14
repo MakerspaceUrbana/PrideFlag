@@ -154,6 +154,25 @@ int coord(int row, int col) {
 	return res;
 }
 
+int row_length(int row) {
+	switch(row) {
+		case 1:
+			return N_RED;
+		case 2:
+			return N_ORANGE;
+		case 3:
+			return N_YELLOW;
+		case 4:
+			return N_GREEN;
+		case 5:
+			return N_BLUE;
+		case 6:
+			return N_PURPLE;
+		default:
+			return N_PURPLE;
+	}
+}
+
 // For color selection, it is sometimes useful to know what
 // row an led number is in. This will return the row number
 int num_to_row(int n) {
@@ -192,21 +211,18 @@ void clear() {
 //sets the rainbow pattern at the specified brightness
 void solid(uint8_t bright) {
 	for(int i=1; i <= 6; i++) {
-		setstrip(i, 25, setBrightness(bright, color_row[i-1]));
+		setstrip(i, row_length(i), setBrightness(bright, color_row[i-1]));
 	}
 }
 
 // The flag starts at col 0 as very faint, and increases brightness
 // in each column until column 25 is super bright
 void fade_LtR() {
-	for(uint8_t i=0; i < 25 ; i++)
-	{
-		setPixel(coord(1,i), setBrightness(i * 10, RED));
-		setPixel(coord(2,i), setBrightness(i * 10, ORANGE));
-		setPixel(coord(3,i), setBrightness(i * 10, YELLOW));
-		setPixel(coord(4,i), setBrightness(i * 10, GREEN));
-		setPixel(coord(5,i), setBrightness(i * 10, BLUE));
-		setPixel(coord(6,i), setBrightness(i * 10, PURPLE));
+	for (uint8_t j=1; j< 7; j++) {
+		for(uint8_t i=0; i < row_length(j) ; i++)
+		{
+			setPixel(coord(j,i), setBrightness(i * 10, color_row[j-1]));
+		}
 	}
 	strip.show();
 }
@@ -239,11 +255,11 @@ void fade_in(uint8_t start, uint8_t end) {
 void alt_tetris_in() {
 	for (int i=6; i>0; i--) {
 		for (int j=1; j<=i; j++) {
-			setstrip(j, 25, color_row[i-1]);
+			setstrip(j, row_length(i), color_row[i-1]);
 			delay(100);
-			setstrip(j, 25, OFF);
+			setstrip(j, row_length(i), OFF);
 		}
-		setstrip(i, 25, color_row[i-1]);
+		setstrip(i, row_length(i), color_row[i-1]);
 	}
 }
 
@@ -257,7 +273,7 @@ int twinkle_period() {
 void start_one_twink() {
 	while (1) {
 		int row = random(1, 7);
-		int col = random(1,25);
+		int col = random(1,row_length(row));
 		int target = coord(row, col);
 		if (_timings[target].period == 0) {
 			_timings[target].period = twinkle_period();
@@ -361,7 +377,7 @@ void random_in() {
 		uint8_t target_row = color_order[c1]+1;
 		bool target_found = false;
 		while(target_found == false) {
-			for(int i=0; i < 25; i++) {
+			for(int i=0; i < row_length(target_row); i++) {
 				if (color_order[coord(target_row, i)] != (target_row-1)) {
 					c2 = coord(target_row, i);
 					target_found = true;
