@@ -10,14 +10,14 @@
 //   NEO_KHZ400  400 KHz bitstream (e.g. FLORA pixels)
 //   NEO_KHZ800  800 KHz bitstream (e.g. High Density LED strip)
 
-#define N_RED    23
-#define N_ORANGE 25
-#define N_YELLOW 25
-#define N_GREEN  25
-#define N_BLUE   25
-#define N_PURPLE 25
+#define N_RED    24
+#define N_ORANGE 24
+#define N_YELLOW 24
+#define N_GREEN  24
+#define N_BLUE   24
+#define N_PURPLE 24
 
-#define NUM_LEDS 148
+#define NUM_LEDS 144
 #define TWINKLE_THRESHOLD 1
 #define TWINKLE_PERIOD_MAX 100
 #define TWINKLESTART 100
